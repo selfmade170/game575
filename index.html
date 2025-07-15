@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1-Minute Timer</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for sound generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        /* Custom styles to ensure Inter font and smooth transitions */
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.5s ease;
+        }
+        .timer-display {
+            font-variant-numeric: tabular-nums; /* Ensures numbers align vertically */
+        }
+        .button-shadow {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        .button-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15), 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .button-active:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body class="bg-[#173F5F] flex items-center justify-center min-h-screen text-white p-4">
+    <div class="bg-[#20639B] p-8 rounded-2xl shadow-xl text-center max-w-md w-full">
+        <h1 class="text-4xl font-bold mb-6">Timer</h1>
+
+        <!-- Timer display -->
+        <div id="timerDisplay" class="timer-display text-7xl font-extrabold mb-8 bg-[#3CAEA3] py-8 rounded-xl shadow-inner">
+            01:00
+        </div>
+
+        <!-- Timer controls -->
+        <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+            <button id="startButton" class="bg-[#F6D55C] text-[#173F5F] font-bold py-3 px-8 rounded-xl button-shadow button-hover button-active transition-all duration-200 text-lg">
+                Start
+            </button>
+            <button id="stopButton" class="bg-[#ED553B] text-white font-bold py-3 px-8 rounded-xl button-shadow button-hover button-active transition-all duration-200 text-lg" disabled>
+                Stop
+            </button>
+            <button id="resetButton" class="bg-gray-400 text-white font-bold py-3 px-8 rounded-xl button-shadow button-hover button-active transition-all duration-200 text-lg">
+                Reset
+            </button>
+        </div>
+
+        <!-- Message box for alerts -->
+        <div id="messageBox" class="mt-6 p-4 bg-yellow-200 text-yellow-800 rounded-lg hidden"></div>
+    </div>
+
+    <script>
+        // Get DOM elements
+        const timerDisplay = document.getElementById('timerDisplay');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const resetButton = document.getElementById('resetButton');
+        const messageBox = document.getElementById('messageBox');
+
+        // Timer variables
+        let totalSeconds = 60; // 1 minute
+        let intervalId;
+        let isRunning = false;
+
+        // Create a simple synth for the "Stop" sound using Tone.js
+        const synth = new Tone.Synth().toDestination();
+
+        /**
+         * Plays a "Stop" sound using Tone.js.
+         * Plays a short, descending tone.
+         */
+        function playStopSound() {
+            // Play a C4 note, then a G3 note to create a descending effect
+            synth.triggerAttackRelease('C4', '8n', Tone.now());
+            synth.triggerAttackRelease('G3', '8n', Tone.now() + 0.2); // Play G3 after 0.2 seconds
+        }
+
+        /**
+         * Formats seconds into MM:SS string.
+         * @param {number} seconds - The total number of seconds.
+         * @returns {string} Formatted time string (e.g., "01:00").
+         */
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+        }
+
+        /**
+         * Updates the timer display.
+         */
+        function updateDisplay() {
+            timerDisplay.textContent = formatTime(totalSeconds);
+        }
+
+        /**
+         * Displays a message in the message box.
+         * @param {string} message - The message to display.
+         * @param {string} type - Type of message (e.g., 'success', 'error', 'warning').
+         */
+        function showMessage(message, type = 'info') {
+            messageBox.textContent = message;
+            messageBox.className = `mt-6 p-4 rounded-lg ${getMessageBoxClasses(type)}`;
+            messageBox.classList.remove('hidden');
+        }
+
+        /**
+         * Returns CSS classes for the message box based on type.
+         * @param {string} type - The type of message.
+         * @returns {string} CSS classes.
+         */
+        function getMessageBoxClasses(type) {
+            switch (type) {
+                case 'success': return 'bg-green-200 text-green-800';
+                case 'error': return 'bg-red-200 text-red-800';
+                case 'warning': return 'bg-yellow-200 text-yellow-800';
+                default: return 'bg-blue-200 text-blue-800';
+            }
+        }
+
+        /**
+         * Hides the message box.
+         */
+        function hideMessageBox() {
+            messageBox.classList.add('hidden');
+        }
+
+        /**
+         * Starts the timer countdown.
+         */
+        function startTimer() {
+            if (isRunning) return; // Prevent multiple intervals
+            isRunning = true;
+            hideMessageBox(); // Hide any previous messages
+            startButton.disabled = true;
+            stopButton.disabled = false;
+            resetButton.disabled = false;
+
+            intervalId = setInterval(() => {
+                totalSeconds--;
+                updateDisplay();
+
+                if (totalSeconds <= 0) {
+                    clearInterval(intervalId);
+                    isRunning = false;
+                    playStopSound();
+                    showMessage("Time's up! Stop.", 'warning');
+                    startButton.disabled = true; // Timer finished, disable start
+                    stopButton.disabled = true; // Timer finished, disable stop
+                    resetButton.disabled = false; // Allow reset
+                }
+            }, 1000); // Update every second
+        }
+
+        /**
+         * Stops the timer countdown.
+         */
+        function stopTimer() {
+            if (!isRunning) return;
+            clearInterval(intervalId);
+            isRunning = false;
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            resetButton.disabled = false;
+            showMessage("Timer stopped.", 'info');
+        }
+
+        /**
+         * Resets the timer to its initial state.
+         */
+        function resetTimer() {
+            clearInterval(intervalId);
+            isRunning = false;
+            totalSeconds = 60; // Reset to 1 minute
+            updateDisplay();
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            resetButton.disabled = false;
+            hideMessageBox(); // Clear messages on reset
+        }
+
+        // Event listeners for buttons
+        startButton.addEventListener('click', startTimer);
+        stopButton.addEventListener('click', stopTimer);
+        resetButton.addEventListener('click', resetTimer);
+
+        // Initial display update when the page loads
+        window.onload = function() {
+            updateDisplay();
+        };
+    </script>
+</body>
+</html>
